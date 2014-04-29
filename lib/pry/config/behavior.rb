@@ -19,10 +19,7 @@ module Pry::Config::Behavior
   end
 
   def initialize(default = Pry.config)
-    if default
-      @default = default.dup
-      @default.default_for(self)
-    end
+    @default = default
     @default_for = nil
     @lookup = {}
   end

@@ -50,6 +50,19 @@ class Pry
     Thread.current[:__pry__] ||= Pry::Config.from_hash({}, nil)
   end
 
+  # @return [Pry]
+  def self.instance
+    current[:pry]
+  end
+
+  def self.with_instance(instance, &block)
+    old = current[:pry]
+    current[:pry] = instance
+    yield
+  ensure
+    current[:pry] = old
+  end
+
   # Load the given file in the context of `Pry.toplevel_binding`
   # @param [String] file The unexpanded file path.
   def self.load_file_at_toplevel(file)

@@ -39,7 +39,7 @@ class Pry
   attr_reader :config
 
   extend Pry::Config::Convenience
-  config_shortcut *Pry::Config.shortcuts
+  config_shortcut(*Pry::Config.shortcuts)
   EMPTY_COMPLETIONS = [].freeze
 
   # Create a new {Pry} instance.
@@ -235,24 +235,26 @@ class Pry
   def eval(line, options={})
     return false if @stopped
 
-    exit_value = nil
-    exception = catch(:raise_up) do
-      exit_value = catch(:breakout) do
-        handle_line(line, options)
-        # We use 'return !@stopped' here instead of 'return true' so that if
-        # handle_line has stopped this pry instance (e.g. by opening _pry_.repl and
-        # then popping all the bindings) we still exit immediately.
-        return !@stopped
+    Pry.with_instance self do
+      exit_value = nil
+      exception = catch(:raise_up) do
+        exit_value = catch(:breakout) do
+          handle_line(line, options)
+          # We use 'return !@stopped' here instead of 'return true' so that if
+          # handle_line has stopped this pry instance (e.g. by opening _pry_.repl and
+          # then popping all the bindings) we still exit immediately.
+          return !@stopped
+        end
+        exception = false
       end
-      exception = false
+
+      @stopped = true
+      @exit_value = exit_value
+
+      # TODO: make this configurable?
+      raise exception if exception
+      return false
     end
-
-    @stopped = true
-    @exit_value = exit_value
-
-    # TODO: make this configurable?
-    raise exception if exception
-    return false
   end
 
   def handle_line(line, options)
@@ -347,14 +349,18 @@ class Pry
   end
 
   def evaluate_ruby(code)
-    inject_sticky_locals!
-    exec_hook :before_eval, code, self
+    Pry.with_instance self do
+      begin
+        inject_sticky_locals!
+        exec_hook :before_eval, code, self
 
-    result = current_binding.eval(code, Pry.eval_path, Pry.current_line)
-    set_last_result(result, code)
-  ensure
-    update_input_history(code)
-    exec_hook :after_eval, result, self
+        result = current_binding.eval(code, Pry.eval_path, Pry.current_line)
+        set_last_result(result, code)
+      ensure
+        update_input_history(code)
+        exec_hook :after_eval, result, self
+      end
+    end
   end
 
   # Output the result or pass to an exception handler (if result is an exception).
@@ -398,30 +404,32 @@ class Pry
   # @param [String] val The line to process.
   # @return [Boolean] `true` if `val` is a command, `false` otherwise
   def process_command(val)
-    val = val.chomp
-    result = commands.process_line(val,
-      :target => current_binding,
-      :output => output,
-      :eval_string => @eval_string,
-      :pry_instance => self
-    )
+    Pry.with_instance self do
+      val = val.chomp
+      result = commands.process_line(val,
+        :target => current_binding,
+        :output => output,
+        :eval_string => @eval_string,
+        :pry_instance => self
+      )
 
-    # set a temporary (just so we can inject the value we want into eval_string)
-    Pry.current[:pry_cmd_result] = result
+      # set a temporary (just so we can inject the value we want into eval_string)
+      Pry.current[:pry_cmd_result] = result
 
-    # note that `result` wraps the result of command processing; if a
-    # command was matched and invoked then `result.command?` returns true,
-    # otherwise it returns false.
-    if result.command?
-      if !result.void_command?
-        # the command that was invoked was non-void (had a return value) and so we make
-        # the value of the current expression equal to the return value
-        # of the command.
-        @eval_string.replace "::Pry.current[:pry_cmd_result].retval\n"
+      # note that `result` wraps the result of command processing; if a
+      # command was matched and invoked then `result.command?` returns true,
+      # otherwise it returns false.
+      if result.command?
+        if !result.void_command?
+          # the command that was invoked was non-void (had a return value) and so we make
+          # the value of the current expression equal to the return value
+          # of the command.
+          @eval_string.replace "::Pry.current[:pry_cmd_result].retval\n"
+        end
+        true
+      else
+        false
       end
-      true
-    else
-      false
     end
   end
 
@@ -443,13 +451,15 @@ class Pry
   # @example
   #   pry_instance.run_command("ls -m")
   def run_command(val)
-    commands.process_line(val,
-      :eval_string => @eval_string,
-      :target => current_binding,
-      :pry_instance => self,
-      :output => output
-    )
-    Pry::Command::VOID_VALUE
+    Pry.with_instance self do
+      commands.process_line(val,
+        :eval_string => @eval_string,
+        :target => current_binding,
+        :pry_instance => self,
+        :output => output
+      )
+      Pry::Command::VOID_VALUE
+    end
   end
 
   # Execute the specified hook.
