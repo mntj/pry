@@ -255,12 +255,14 @@ class Pry
     @exit_value = exit_value
 
     # TODO: make this configurable?
+    @outcome = exception if exception
     raise exception if exception
     return false
   end
 
   def handle_line(line, options)
     if line.nil?
+      @outcome = ""
       config.control_d_handler.call(@eval_string, self)
       return
     end
@@ -277,6 +279,7 @@ class Pry
     rescue RescuableException => e
       self.last_exception = e
       result = e
+      @outcome = e
 
       Pry.critical_section do
         show_result(result)
@@ -291,6 +294,7 @@ class Pry
     begin
       complete_expr = Pry::Code.complete_expression?(@eval_string)
     rescue SyntaxError => e
+      @outcome = "SyntaxError: #{e.message.sub(/.*syntax error, */m, '')}"
       output.puts "SyntaxError: #{e.message.sub(/.*syntax error, */m, '')}"
       reset_eval_string
     end
@@ -323,6 +327,7 @@ class Pry
         reset_eval_string
 
         result = evaluate_ruby(eval_string)
+        @outcome = result
       rescue RescuableException, *jruby_exceptions => e
         # Eliminate following warning:
         # warning: singleton on non-persistent Java type X
@@ -332,6 +337,7 @@ class Pry
         end
         self.last_exception = e
         result = e
+        @outcome = e
       end
 
       Pry.critical_section do
@@ -363,7 +369,6 @@ class Pry
 
   # Output the result or pass to an exception handler (if result is an exception).
   def show_result(result)
-    @outcome = result
     if last_result_is_exception?
       exception_handler.call(output, result, self)
     elsif should_print?
@@ -377,11 +382,14 @@ class Pry
     # the exception either.
     begin
       output.puts "(pry) output error: #{e.inspect}"
+      @outcome = "(pry) output error: #{e.inspect}"
     rescue RescuableException => e
       if last_result_is_exception?
         output.puts "(pry) output error: failed to show exception"
+        @outcome = "(pry) output error: failed to show exception"
       else
         output.puts "(pry) output error: failed to show result"
+        @outcome = "(pry) output error: failed to show result"
       end
     end
   ensure
@@ -439,6 +447,7 @@ class Pry
   rescue CommandError, Slop::InvalidOptionError, MethodSource::SourceNotFoundError => e
     Pry.last_internal_error = e
     output.puts "Error: #{e.message}"
+    @outcome = "Error: #{e.message}"
     true
   end
 
@@ -470,6 +479,7 @@ class Pry
     hooks.exec_hook(name, *args, &block).tap do
       hooks.errors[e_before..-1].each do |e|
         output.puts "#{name} hook failed: #{e.class}: #{e.message}"
+        @outcome = "#{name} hook failed: #{e.class}: #{e.message}"
         output.puts "#{e.backtrace.first}"
         output.puts "(see _pry_.hooks.errors to debug)"
       end
@@ -483,7 +493,7 @@ class Pry
   def set_last_result(result, code="")
     @last_result_is_exception = false
     @output_array << result
-
+    @outcome = result
     self.last_result = result unless code =~ /\A\s*\z/
   end
 
@@ -497,6 +507,7 @@ class Pry
     last_exception = Pry::LastException.new(e)
     @last_result_is_exception = true
     @output_array << last_exception
+    @outcome = last_exception
     @last_exception = last_exception
   end
 
@@ -653,6 +664,7 @@ class Pry
       throw :raise_up, exception
     else
       binding_stack.pop
+      @outcome = exception
       raise exception
     end
   end
