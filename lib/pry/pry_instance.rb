@@ -30,6 +30,7 @@ class Pry
   attr_accessor :last_result
   attr_accessor :last_file
   attr_accessor :last_dir
+  attr_accessor :outcome
 
   attr_reader :last_exception
   attr_reader :command_state
@@ -70,6 +71,7 @@ class Pry
     @backtrace     = options.delete(:backtrace) || caller
     target = options.delete(:target)
     @config = Pry::Config.new
+    @outcome = nil
     config.merge!(options)
     push_prompt(config.prompt)
     @input_array  = Pry::HistoryArray.new config.memory_size
@@ -361,6 +363,7 @@ class Pry
 
   # Output the result or pass to an exception handler (if result is an exception).
   def show_result(result)
+    @outcome = result
     if last_result_is_exception?
       exception_handler.call(output, result, self)
     elsif should_print?
