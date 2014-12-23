@@ -361,6 +361,7 @@ class Pry
     exec_hook :before_eval, code, self
 
     result = current_binding.eval(code, Pry.eval_path, Pry.current_line)
+    @outcome = result
     set_last_result(result, code)
   ensure
     update_input_history(code)
@@ -370,8 +371,10 @@ class Pry
   # Output the result or pass to an exception handler (if result is an exception).
   def show_result(result)
     if last_result_is_exception?
+      @outcome = result
       exception_handler.call(output, result, self)
     elsif should_print?
+      @outcome = result
       print.call(output, result, self)
     else
       # nothin'
@@ -654,7 +657,7 @@ class Pry
                 else
                   args.first.exception(args[1])
                 end
-
+    @outcome = exception
     raise TypeError, "exception object expected" unless exception.is_a? Exception
 
     exception.set_backtrace(args.length === 3 ? args[2] : caller(1))
