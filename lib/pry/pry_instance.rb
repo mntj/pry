@@ -38,7 +38,7 @@ class Pry
   attr_reader :input_array
   attr_reader :output_array
   attr_reader :config
-
+  binding.pry
   extend Pry::Config::Convenience
   config_shortcut(*Pry::Config.shortcuts)
   EMPTY_COMPLETIONS = [].freeze
@@ -295,7 +295,7 @@ class Pry
       complete_expr = Pry::Code.complete_expression?(@eval_string)
     rescue SyntaxError => e
       @outcome = "SyntaxError: #{e.message.sub(/.*syntax error, */m, '')}"
-      output.puts "SyntxError: #{e.message.sub(/.*syntax error, */m, '')}"
+      output.puts "SyntaxError: #{e.message.sub(/.*syntax error, */m, '')}"
       reset_eval_string
     end
 
